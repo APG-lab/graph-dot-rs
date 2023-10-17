@@ -9,7 +9,7 @@ path = "src/main/rust/lib.rs"
 
 [dependencies]
 env_logger = "0.9"
-graph = { path = "../graph-rs", version = "0.0.1" }
+graph = { path = "../graph", version = "0.0.1" }
 log = "0.4"
 nom = "7"
 thiserror = "1.0"
