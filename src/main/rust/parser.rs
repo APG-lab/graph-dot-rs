@@ -374,7 +374,7 @@ mod tests
         expected_graph.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
         let input_graph = "digraph {\n\ta -> b\n}";
 
-        assert_eq! (parse (input_graph).unwrap (), expected_graph);
+        assert_eq! (parse (input_graph).unwrap (), vec![expected_graph]);
     }
 }
 
