@@ -244,15 +244,19 @@ fn graph_type_graph<T> (_: T) -> dot::GraphType { dot::GraphType::Graph }
 
 fn parse_graph (input: &str) -> IResult<&str, (Option<String>, dot::GraphType, Option<String>, Vec<dot::Statement>), VerboseError<&str>>
 {
-    tuple ( (
-        opt ( map (tag ("strict"), |_| String::from ("strict") ) ),
-        alt ( (
-            map (tag ("digraph"), graph_type_digraph),
-            map (tag ("graph"), graph_type_graph)
-        ) ),
-        opt ( dot_id ),
-        stmt_list
-    ) ) (input)
+    preceded (sp,
+        tuple ( (
+            opt ( map (tag ("strict"), |_| String::from ("strict") ) ),
+            preceded (sp,
+                alt ( (
+                    map (tag ("digraph"), graph_type_digraph),
+                    map (tag ("graph"), graph_type_graph)
+                ) )
+            ),
+            opt ( dot_id ),
+            stmt_list
+        ) )
+    ) (input)
 }
 
 pub(crate) fn parse (input: &str)
@@ -289,12 +293,17 @@ mod tests
     {
         let expected_float = (String::from ("key"), graph::graph::AttributeValue::from (1.1));
         let expected_integer = (String::from ("key"), graph::graph::AttributeValue::from(42));
+        let expected_string = (String::from ("key"), graph::graph::AttributeValue::from ("bar"));
 
         let input_float = "key=1.1";
         let input_integer = "key=42";
+        let input_string = r#"key="bar""#;
+        let input_string_qname = r#""key"="bar""#;
 
         assert_eq! (key_value_pair (input_float).unwrap ().1, expected_float);
         assert_eq! (key_value_pair (input_integer).unwrap ().1, expected_integer);
+        assert_eq! (key_value_pair (input_string).unwrap ().1, expected_string);
+        assert_eq! (key_value_pair (input_string_qname).unwrap ().1, expected_string);
     }
 
     #[test]
@@ -373,6 +382,28 @@ mod tests
         let mut expected_graph = graph::graph::LabelledGraph::new ();
         expected_graph.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
         let input_graph = "digraph {\n\ta -> b\n}";
+
+        assert_eq! (parse (input_graph).unwrap (), vec![expected_graph]);
+    }
+
+    #[test]
+    fn test_parse_strict ()
+    {
+        init ();
+        let mut expected_graph = graph::graph::LabelledGraph::new ();
+        expected_graph.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
+        let input_graph = "strict graph {\n\ta -> b\n}";
+
+        assert_eq! (parse (input_graph).unwrap (), vec![expected_graph]);
+    }
+
+    #[test]
+    fn test_parse_ws ()
+    {
+        init ();
+        let mut expected_graph = graph::graph::LabelledGraph::new ();
+        expected_graph.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
+        let input_graph = "\n\tdigraph {\n\ta -> b\n}\n\t\n";
 
         assert_eq! (parse (input_graph).unwrap (), vec![expected_graph]);
     }
