@@ -23,6 +23,7 @@ use nom::multi::many1;
 use nom::sequence::delimited;
 use nom::sequence::pair;
 use nom::sequence::preceded;
+use nom::sequence::terminated;
 use nom::sequence::tuple;
 use nom::IResult;
 use std::collections;
@@ -150,7 +151,7 @@ fn key_value_pairs (input: &str) -> IResult<&str, collections::HashMap<String, g
     map(
         pair(
             key_value_pair,
-            many0(preceded(preceded(sp, tag(",")), key_value_pair)),
+            many0(preceded(preceded(sp, alt ( (tag(","), tag (";")) )), key_value_pair)),
         ),
         |(head, tail)| std::iter::once(head).chain(tail).collect::<collections::HashMap<_, _>>(),
     )(input)
@@ -160,7 +161,7 @@ fn attr_list (input: &str) -> IResult<&str, collections::HashMap<String, graph::
     map(
         delimited(
             preceded(sp, tag("[")),
-            opt(key_value_pairs),
+            opt(terminated (key_value_pairs, opt (preceded(sp, alt ( (tag(","), tag (";")) ))))),
             preceded(sp, tag("]")),
         ),
         |properties| properties.unwrap_or_default(),
@@ -353,6 +354,22 @@ mod tests
 
         assert_eq! (node_stmt (input_node_stmt).unwrap ().1, expected_node_stmt);
 
+    }
+
+    #[test]
+    fn test_node_stmt_with_attr_list_multi ()
+    {
+        let expected_node_stmt = (String::from ("a"), Some (collections::HashMap::from ([
+                                                                                        (String::from ("foo"), graph::graph::AttributeValue::from ("bar")),
+                                                                                        (String::from ("cat"), graph::graph::AttributeValue::from ("mat"))
+            ])));
+        let input_node_stmt_comma = "a [foo='bar',cat='mat']";
+        let input_node_stmt_semi = "a [foo='bar';cat='mat']";
+        let input_node_stmt_semi_term = "a [foo='bar';cat='mat';]";
+
+        assert_eq! (node_stmt (input_node_stmt_comma).unwrap ().1, expected_node_stmt, "Failed node_stmt_comma");
+        assert_eq! (node_stmt (input_node_stmt_semi).unwrap ().1, expected_node_stmt, "Failed node_stmt_semi");
+        assert_eq! (node_stmt (input_node_stmt_semi_term).unwrap ().1, expected_node_stmt, "Failed node_stmt_semi_term");
     }
 
     #[test]
