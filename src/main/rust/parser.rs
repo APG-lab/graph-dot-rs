@@ -11,6 +11,7 @@ use nom::character::complete::alphanumeric1;
 use nom::character::complete::digit0;
 use nom::character::complete::digit1;
 use nom::character::complete::none_of;
+use nom::character::complete::space1;
 use nom::combinator::cut;
 use nom::combinator::map;
 use nom::combinator::opt;
@@ -31,6 +32,20 @@ use std::str::FromStr;
 
 fn sp(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
     take_while(|c: char| c.is_ascii_whitespace())(input)
+}
+
+fn string_within_attribute_value (input: &str) -> IResult<&str, String, VerboseError<&str>> {
+    map (
+        many1 ( alt ((
+            alphanumeric1,
+            space1,
+            tag ("."),
+            tag ("_"),
+            tag ("-"),
+            tag ("/")
+        ))),
+        |sc| sc.into_iter ().collect::<String> ()
+    )(input)
 }
 
 fn neg_sign(input: &str) -> IResult<&str, bool, VerboseError<&str>> {
@@ -60,6 +75,86 @@ fn float_literal(input: &str) -> IResult<&str, graph::graph::AttributeValue, Ver
     )(input)
 }
 
+fn key_value_pair_string (input: &str) -> IResult<&str, (String, String), VerboseError<&str>> {
+    pair(
+        string_within_attribute_value,
+        map (preceded(tag(":"), cut(string_within_attribute_value)), String::from)
+    )(input)
+}
+
+fn collection_string_array (input: &str) -> IResult<&str, graph::graph::AttributeValue, VerboseError<&str>> {
+    map(
+        pair(
+            string_within_attribute_value,
+            many0(preceded(tag(","), string_within_attribute_value))
+        ),
+        |(head, tail)| graph::graph::AttributeValue::from (std::iter::once(head).chain(tail).collect::<Vec<String>>()),
+    )(input)
+}
+
+fn collection_string_map (input: &str) -> IResult<&str, graph::graph::AttributeValue, VerboseError<&str>> {
+    map(
+        pair(
+            key_value_pair_string,
+            many0(preceded(tag(","), key_value_pair_string)),
+        ),
+        |(head, tail)| graph::graph::AttributeValue::from (std::iter::once(head).chain(tail).collect::<collections::HashMap<String, String>>()),
+    )(input)
+}
+
+fn collection_string_set (input: &str) -> IResult<&str, graph::graph::AttributeValue, VerboseError<&str>> {
+    map(
+        pair(
+            string_within_attribute_value,
+            many0(preceded(tag(","), string_within_attribute_value))
+        ),
+        |(head, tail)| graph::graph::AttributeValue::from (std::iter::once(head).chain(tail).collect::<collections::HashSet<String>>()),
+    )(input)
+}
+
+fn parse_collection (input: &str)
+    -> IResult<&str, graph::graph::AttributeValue, VerboseError<&str>>
+{
+    alt ( (
+        delimited ( tag ("["), collection_string_array, tag ("]") ),
+        delimited ( tag ("{"), collection_string_map, tag ("}") ),
+        delimited ( tag ("{"), collection_string_set, tag ("}") )
+            )) (input)
+}
+
+fn remove_first_and_last (value: &str)
+    -> &str
+{
+    let mut chars = value.chars ();
+    chars.next ();
+    chars.next_back ();
+    chars.as_str ()
+}
+
+fn string_to_attribute_value (input: &str)
+    -> graph::graph::AttributeValue
+{
+    if ( input.starts_with ("[[") && input.ends_with ("]]") ) ||
+        ( input.starts_with ("{{") && input.ends_with ("}}") )
+    {
+        graph::graph::AttributeValue::from (remove_first_and_last (input))
+    }
+    else
+    {
+        match parse_collection (input) {
+            Ok (tt) => {
+                tt.1
+            },
+            Err (nom::Err::Error (_)) | Err (nom::Err::Failure (_)) => {
+                graph::graph::AttributeValue::from (input)
+            },
+            Err(nom::Err::Incomplete(_)) => {
+                graph::graph::AttributeValue::from (input)
+            }
+        }
+    }
+}
+
 fn single_quoted_string(input: &str) -> IResult<&str, &str, VerboseError<&str>> {
     let escaped = escaped(none_of("\\\'"), '\\', tag("'"));
     let escaped_or_empty = alt((escaped, tag("")));
@@ -75,7 +170,7 @@ fn double_quoted_string(input: &str) -> IResult<&str, &str, VerboseError<&str>> 
 fn string_literal(input: &str) -> IResult<&str, graph::graph::AttributeValue, VerboseError<&str>> {
     map(
         alt((single_quoted_string, double_quoted_string)),
-        graph::graph::AttributeValue::from,
+        string_to_attribute_value,
     )(input)
 }
 
@@ -293,7 +388,7 @@ mod tests
     fn test_attr ()
     {
         let expected_float = (String::from ("key"), graph::graph::AttributeValue::from (1.1));
-        let expected_integer = (String::from ("key"), graph::graph::AttributeValue::from(42));
+        let expected_integer = (String::from ("key"), graph::graph::AttributeValue::from (42));
         let expected_string = (String::from ("key"), graph::graph::AttributeValue::from ("bar"));
 
         let input_float = "key=1.1";
@@ -305,6 +400,77 @@ mod tests
         assert_eq! (key_value_pair (input_integer).unwrap ().1, expected_integer);
         assert_eq! (key_value_pair (input_string).unwrap ().1, expected_string);
         assert_eq! (key_value_pair (input_string_qname).unwrap ().1, expected_string);
+    }
+
+    #[test]
+    fn test_attr_collection_string_array ()
+    {
+        let expected_string_array_char = (String::from ("key"), graph::graph::AttributeValue::from (vec![
+            String::from ("a")
+        ]));
+        let expected_string_array_multi = (String::from ("key"), graph::graph::AttributeValue::from (vec![
+            String::from ("a"),
+            String::from ("b"),
+            String::from ("a")
+        ]));
+        let expected_string_array_escaped = (String::from ("key"), graph::graph::AttributeValue::from (String::from ("[]")));
+
+        let input_string_array_char = r#"key="[a]""#;
+        let input_string_array_multi = r#"key="[a,b,a]""#;
+        let input_string_array_escaped = r#"key="[[]]""#;
+
+        assert_eq! (key_value_pair (input_string_array_char).unwrap ().1, expected_string_array_char);
+        assert_eq! (key_value_pair (input_string_array_multi).unwrap ().1, expected_string_array_multi);
+        assert_eq! (key_value_pair (input_string_array_escaped).unwrap ().1, expected_string_array_escaped);
+    }
+
+    #[test]
+    fn test_attr_collection_string_map ()
+    {
+        let exepected_string_map_char = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashMap::<String,String>::from ([
+            ( String::from ("a"), String::from ("1") )
+        ])));
+        let exepected_string_map_string = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashMap::<String,String>::from ([
+            ( String::from ("aa"), String::from ("11") )
+        ])));
+        let exepected_string_map_special = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashMap::<String,String>::from ([
+            ( String::from ("./_-"), String::from ("./_-") )
+        ])));
+        let exepected_string_map_multi = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashMap::<String,String>::from ([
+            ( String::from ("a"), String::from ("1") ),
+            ( String::from ("b"), String::from ("2") )
+        ])));
+        let expected_string_map_escaped = (String::from ("key"), graph::graph::AttributeValue::from (String::from ("{}")));
+
+        let input_string_map_char = r#"key="{a:1}""#;
+        let input_string_map_string = r#"key="{aa:11}""#;
+        let input_string_map_special = r#"key="{./_-:./_-}""#;
+        let input_string_map_multi = r#"key="{a:1,b:2}""#;
+        let input_string_map_escaped = r#"key="{{}}""#;
+
+        assert_eq! (key_value_pair (input_string_map_char).unwrap ().1, exepected_string_map_char);
+        assert_eq! (key_value_pair (input_string_map_string).unwrap ().1, exepected_string_map_string);
+        assert_eq! (key_value_pair (input_string_map_special).unwrap ().1, exepected_string_map_special);
+        assert_eq! (key_value_pair (input_string_map_multi).unwrap ().1, exepected_string_map_multi);
+        assert_eq! (key_value_pair (input_string_map_escaped).unwrap ().1, expected_string_map_escaped);
+    }
+
+    #[test]
+    fn test_attr_collection_string_set ()
+    {
+        let expected_string_set_char = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashSet::<String>::from ([
+            String::from ("a")
+        ])));
+        let expected_string_set_multi = (String::from ("key"), graph::graph::AttributeValue::from (collections::HashSet::<String>::from ([
+            String::from ("a"),
+            String::from ("b")
+        ])));
+
+        let input_string_set_char = r#"key="{a}""#;
+        let input_string_set_multi = r#"key="{a,b,a}""#;
+
+        assert_eq! (key_value_pair (input_string_set_char).unwrap ().1, expected_string_set_char);
+        assert_eq! (key_value_pair (input_string_set_multi).unwrap ().1, expected_string_set_multi);
     }
 
     #[test]
