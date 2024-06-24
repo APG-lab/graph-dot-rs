@@ -14,7 +14,7 @@ pub fn from_str (dot: &str)
 pub fn graph_to_dot (output: &mut dyn Write, graph: &graph::graph::LabelledGraph)
     -> Result<(), error::GraphDotError>
 {
-    write! (output, "digraph {} {{\n", graph.graph ().name ())?;
+    write! (output, "digraph \"{}\" {{\n", graph.graph ().name ())?;
     for vertex_id in graph.vertices ()
     {
         let vertex_label = graph.vertex_label (vertex_id)?;
