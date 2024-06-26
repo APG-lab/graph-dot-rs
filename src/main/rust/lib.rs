@@ -17,11 +17,11 @@ pub fn graph_to_dot (output: &mut dyn Write, graph: &graph::graph::Graph)
     write! (output, "digraph \"{}\" {{\n", graph.name ())?;
     for vertex_id in graph.vertices ()
     {
-        write! (output, "\t\"{}\";\n", vertex_id)?;
+        write! (output, "\t{}\n", vertex_id)?;
     }
     for ((a,b), _weight) in graph.edges ()
     {
-        write! (output, "\t{} -> {};\n", a, b)?;
+        write! (output, "\t{} -> {}\n", a, b)?;
     }
     write! (output, "}}\n")?;
     Ok (())
@@ -59,12 +59,13 @@ pub fn labelled_graph_to_dot (output: &mut dyn Write, graph: &graph::graph::Labe
     }
     for ((a,b), _weight) in graph.edges ()
     {
-        write! (output, "\t{} -> {};\n", a, b)?;
+        let al = graph.vertex_label (a)?;
+        let bl = graph.vertex_label (b)?;
+        write! (output, "\t\"{}\" -> \"{}\"\n", al, bl)?;
     }
     write! (output, "}}\n")?;
     Ok (())
 }
-
 
 pub fn labelled_graph_to_dot_gviz (output: &mut dyn Write, graph: &graph::graph::LabelledGraph)
     -> Result<(), error::GraphDotError>
@@ -88,7 +89,7 @@ pub fn labelled_graph_to_dot_gviz (output: &mut dyn Write, graph: &graph::graph:
 #[cfg(test)]
 mod tests_lib
 {
-    use log::debug;
+    //use log::debug;
     use std::collections;
     use std::sync;
 
@@ -118,6 +119,39 @@ mod tests_lib
 
     #[test]
     fn labelled_graph ()
+    {
+        init ();
+        let g = graph::graph::LabelledGraph::new_with_name ("foo@bar");
+
+        let mut buf = Vec::new();
+        super::labelled_graph_to_dot (&mut buf, &g).expect ("Failed to serialise to dot");
+
+        let s = String::from_utf8 (buf).expect ("Failed to convert dot bytes to string");
+        let sg = super::from_str (s.as_str ()).expect ("Failed to parse dot");
+
+        assert_eq! (sg.len (), 1, "should return a single graph");
+        assert! (graph::eq::labels_and_attrs_eq (&sg[0], &g).expect ("Failed eq check"), "Should be equal:\n\n{:?}\n\nand:\n\n{:?}\n", sg[0], g);
+    }
+
+    #[test]
+    fn labelled_graph_edge ()
+    {
+        init ();
+        let mut g = graph::graph::LabelledGraph::new_with_name ("foo@bar");
+        g.add_edge (String::from ("lims.data.site/name"), String::from ("lims.data.site/id"), None).expect ("Failed to add edge lims.data.site/name -> lims.data.site/id");
+
+        let mut buf = Vec::new();
+        super::labelled_graph_to_dot (&mut buf, &g).expect ("Failed to serialise to dot");
+
+        let s = String::from_utf8 (buf).expect ("Failed to convert dot bytes to string");
+        let sg = super::from_str (s.as_str ()).expect ("Failed to parse dot");
+
+        assert_eq! (sg.len (), 1, "should return a single graph");
+        assert! (graph::eq::labels_and_attrs_eq (&sg[0], &g).expect ("Failed eq check"), "Should be equal:\n\n{:?}\n\nand:\n\n{:?}\n", sg[0], g);
+    }
+
+    #[test]
+    fn labelled_graph_vertex ()
     {
         init ();
         let mut g = graph::graph::LabelledGraph::new_with_name ("foo@bar");

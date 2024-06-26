@@ -494,6 +494,22 @@ mod tests
     }
 
     #[test]
+    fn test_dot_id ()
+    {
+        let expected_alpha = "a";
+        let expected_alpha_str = "aa";
+        let expected_numeric = "1";
+
+        let input_alpha = "a";
+        let input_alpha_str = "aa";
+        let input_numeric = "1";
+
+        assert_eq! (dot_id (input_alpha).unwrap ().1, expected_alpha);
+        assert_eq! (dot_id (input_alpha_str).unwrap ().1, expected_alpha_str);
+        assert_eq! (dot_id (input_numeric).unwrap ().1, expected_numeric);
+    }
+
+    #[test]
     fn test_edge_stmt ()
     {
         let edge_rhs = dot::EdgeRightHandSide { edge_op: dot::EdgeType::Directed, rhs: String::from ("b"), rest: None };
@@ -581,7 +597,7 @@ mod tests
     }
 
     #[test]
-    fn test_parse_ws ()
+    fn test_parse_white_space ()
     {
         init ();
         let mut expected_graph = graph::graph::LabelledGraph::new ();
