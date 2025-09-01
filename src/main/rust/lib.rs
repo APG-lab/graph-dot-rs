@@ -11,6 +11,12 @@ pub fn from_str (dot: &str)
     parser::parse (dot)
 }
 
+pub fn tree_from_str (dot: &str)
+    -> Result<(graph::graph::LabelledGraph, Vec<graph::graph::LabelledGraph>), error::GraphDotError>
+{
+    parser::parse_tree (dot)
+}
+
 pub fn graph_to_dot (output: &mut dyn Write, graph: &graph::graph::Graph)
     -> Result<(), error::GraphDotError>
 {

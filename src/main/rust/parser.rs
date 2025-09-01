@@ -371,6 +371,22 @@ pub(crate) fn parse (input: &str)
     }
 }
 
+pub(crate) fn parse_tree (input: &str)
+    -> Result<(graph::graph::LabelledGraph, Vec<graph::graph::LabelledGraph>), error::GraphDotError>
+{
+    match parse_graph (input) {
+        Ok (tt) => {
+            dot::as_labelled_graphs_tree (tt.1)
+        },
+        Err (nom::Err::Error (e)) | Err (nom::Err::Failure (e)) => {
+            Err (error::GraphDotError::ParseError (convert_error (input, e)))
+        },
+        Err(nom::Err::Incomplete(_)) => {
+            Err (error::GraphDotError::ParseError (String::from ("Input incomplete")))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests
 {
@@ -594,6 +610,77 @@ mod tests
         let input_graph = "strict graph {\n\ta -> b\n}";
 
         assert_eq! (parse (input_graph).unwrap (), vec![expected_graph]);
+    }
+
+    #[test]
+    fn test_parse_subgraph ()
+    {
+        init ();
+        let mut expected_graph_bi   = graph::graph::LabelledGraph::new_with_name ("bI");
+        let mut expected_graph_aii  = graph::graph::LabelledGraph::new_with_name ("aII");
+        let mut expected_graph_ai   = graph::graph::LabelledGraph::new_with_name ("aI");
+        let mut expected_graph_base = graph::graph::LabelledGraph::new ();
+
+        expected_graph_bi.add_edge   (String::from ("g"), String::from ("h"), None).unwrap ();
+        expected_graph_aii.add_edge  (String::from ("e"), String::from ("f"), None).unwrap ();
+        expected_graph_ai.add_edge   (String::from ("c"), String::from ("d"), None).unwrap ();
+        expected_graph_base.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
+
+        let input_graph = r#"
+digraph {
+    subgraph bI {
+        g -> h
+    }
+
+    subgraph aI {
+        subgraph aII {
+            e -> f
+        }
+        c -> d
+    }
+    a -> b
+}"#;
+
+        let expected_g_vec = vec![expected_graph_bi, expected_graph_aii, expected_graph_ai, expected_graph_base];
+        assert_eq! (parse (input_graph).unwrap (), expected_g_vec);
+    }
+
+    #[test]
+    fn test_parse_tree_subgraph ()
+    {
+        init ();
+        let mut expected_graph_bi   = graph::graph::LabelledGraph::new_with_name ("bI");
+        let mut expected_graph_aii  = graph::graph::LabelledGraph::new_with_name ("aII");
+        let mut expected_graph_ai   = graph::graph::LabelledGraph::new_with_name ("aI");
+        let mut expected_graph_base = graph::graph::LabelledGraph::new ();
+
+        expected_graph_bi.add_edge   (String::from ("g"), String::from ("h"), None).unwrap ();
+        expected_graph_aii.add_edge  (String::from ("e"), String::from ("f"), None).unwrap ();
+        expected_graph_ai.add_edge   (String::from ("c"), String::from ("d"), None).unwrap ();
+        expected_graph_base.add_edge (String::from ("a"), String::from ("b"), None).unwrap ();
+
+        let input_graph = r#"
+digraph {
+    subgraph bI {
+        g -> h
+    }
+
+    subgraph aI {
+        subgraph aII {
+            e -> f
+        }
+        c -> d
+    }
+    a -> b
+}"#;
+
+        let mut expected_tree = graph::graph::LabelledGraph::new ();
+        expected_tree.add_edge_raw (3, String::from (""),   0, String::from ("bI"),  None, 0).unwrap ();
+        expected_tree.add_edge_raw (2, String::from ("aI"), 1, String::from ("aII"), None, 0).unwrap ();
+        expected_tree.add_edge_raw (3, String::from (""),   2, String::from ("aI"),  None, 0).unwrap ();
+        let expected_g_vec = vec![expected_graph_bi, expected_graph_aii, expected_graph_ai, expected_graph_base];
+
+        assert_eq! (parse_tree (input_graph).unwrap (), (expected_tree, expected_g_vec));
     }
 
     #[test]
