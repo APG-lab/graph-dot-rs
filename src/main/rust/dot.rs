@@ -3,6 +3,7 @@ use crate::error;
 use graph;
 use log::debug;
 use std::collections;
+use std::iter;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AttributeType
@@ -134,9 +135,8 @@ pub fn as_labelled_graphs (parsed_dot: (Option<String>, GraphType, Option<String
     let mut g = graph::graph::LabelledGraph::new_with_name (&parsed_dot.2.unwrap_or (String::from ("")));
     as_labelled_graph_internal (&mut g, &mut r, None, collections::VecDeque::from (parsed_dot.3))?;
 
-    //debug! ("subgraphs: {:?}", r);
     r.push (g);
-
+    r.reverse ();
     Ok (r)
 }
 
@@ -147,18 +147,24 @@ pub fn as_labelled_graphs_tree (parsed_dot: (Option<String>, GraphType, Option<S
     let mut r = Vec::<graph::graph::LabelledGraph>::new ();
     let mut g = graph::graph::LabelledGraph::new_with_name (&parsed_dot.2.unwrap_or (String::from ("")));
     as_labelled_graph_internal (&mut g, &mut r, Some (&mut t), collections::VecDeque::from (parsed_dot.3))?;
+    t.add_vertex_raw (r.len (), g.graph ().name (), None)?;
+
+    // Add edges to root
     for ( i, sg ) in r.iter ().enumerate ()
     {
-        // Add edge to root
         if t.graph ().inbound (&i)?.is_empty ()
         {
             t.add_edge_raw (r.len (), g.graph ().name (), i, sg.graph ().name (), None, 0)?;
         }
     }
 
-    //debug! ("subgraphs: {:?}", r);
     r.push (g);
 
-    Ok ( (t, r) )
+    let dfs_order = graph::algo::tree_sort (t.graph ())?;
+    let rs = dfs_order.iter ().map (|&x| r.get (x).cloned ().unwrap ()).collect::<Vec<_>> ();
+    let remap = iter::zip (dfs_order, 0..rs.len ()).collect::<collections::HashMap<usize, usize>> ();
+    t.remap_raw (&remap)?;
+
+    Ok ( (t, rs) )
 }
 
