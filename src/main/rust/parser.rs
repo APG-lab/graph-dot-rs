@@ -641,7 +641,7 @@ digraph {
     a -> b
 }"#;
 
-        let expected_g_vec = vec![expected_graph_bi, expected_graph_aii, expected_graph_ai, expected_graph_base];
+        let expected_g_vec = vec![expected_graph_base, expected_graph_ai, expected_graph_aii, expected_graph_bi];
         assert_eq! (parse (input_graph).unwrap (), expected_g_vec);
     }
 
@@ -675,10 +675,10 @@ digraph {
 }"#;
 
         let mut expected_tree = graph::graph::LabelledGraph::new ();
-        expected_tree.add_edge_raw (3, String::from (""),   0, String::from ("bI"),  None, 0).unwrap ();
-        expected_tree.add_edge_raw (2, String::from ("aI"), 1, String::from ("aII"), None, 0).unwrap ();
-        expected_tree.add_edge_raw (3, String::from (""),   2, String::from ("aI"),  None, 0).unwrap ();
-        let expected_g_vec = vec![expected_graph_bi, expected_graph_aii, expected_graph_ai, expected_graph_base];
+        expected_tree.add_edge_raw (0, String::from (""),   1, String::from ("bI"),  None, 0).unwrap ();
+        expected_tree.add_edge_raw (0, String::from (""),   2, String::from ("aI"),  None, 0).unwrap ();
+        expected_tree.add_edge_raw (2, String::from ("aI"), 3, String::from ("aII"), None, 0).unwrap ();
+        let expected_g_vec = vec![expected_graph_base, expected_graph_bi, expected_graph_ai, expected_graph_aii];
 
         assert_eq! (parse_tree (input_graph).unwrap (), (expected_tree, expected_g_vec));
     }
