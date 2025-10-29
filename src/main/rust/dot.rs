@@ -117,9 +117,18 @@ pub fn as_labelled_graph_internal (
 
                     if subgraphs_len_after > subgraphs_len_before
                     {
-                        let v_last = subgraphs_len_after - 1;
-                        let vl_last = t.vertex_label (&v_last)?;
-                        t.add_edge_raw (subgraphs_len_after, sg_name, v_last, vl_last, None, 0)?;
+                        for v_sub in subgraphs_len_before..subgraphs_len_after
+                        {
+                            if t.graph ().inbound (&v_sub)?.is_empty ()
+                            {
+                                let v_sub_name = subgraphs.get (v_sub)
+                                    .ok_or (error::GraphDotError::ParseError (format! ("Failed to build graph tree. Reason: No graph in vec at index {}", v_sub)))?
+                                    .graph ()
+                                    .name ();
+
+                                t.add_edge_raw (subgraphs_len_after, sg_name.clone (), v_sub, v_sub_name, None, 0)?;
+                            }
+                        }
                     }
                 }
             }
